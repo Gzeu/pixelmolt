@@ -268,7 +268,8 @@ export async function placePixel(options: {
   }
   
   // Save to storage (Redis or JSON)
-  await saveCanvasToStorage(canvas);
+  const saveResult = await saveCanvasToStorage(canvas);
+  console.log(`[PixelMolt] Saved pixel at (${x},${y}) - result: ${saveResult}, total pixels: ${canvas.pixels.length}`);
   
   // Award points
   let pointsResult = { points: 0, total: 0 };

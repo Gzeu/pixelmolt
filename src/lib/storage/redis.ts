@@ -48,7 +48,9 @@ interface AgentData {
 
 export async function getCanvas(): Promise<CanvasData | null> {
   try {
+    console.log(`[Redis] Getting canvas from key: ${CANVAS_KEY}`);
     const data = await redis.get<CanvasData>(CANVAS_KEY);
+    console.log(`[Redis] Got canvas: ${data ? data.pixels.length + ' pixels' : 'null'}`);
     return data;
   } catch (e) {
     console.error('[Redis] getCanvas error:', e);
@@ -59,7 +61,9 @@ export async function getCanvas(): Promise<CanvasData | null> {
 export async function saveCanvas(canvas: CanvasData): Promise<boolean> {
   try {
     canvas.lastUpdated = Date.now();
+    console.log(`[Redis] Saving canvas with ${canvas.pixels.length} pixels...`);
     await redis.set(CANVAS_KEY, canvas);
+    console.log(`[Redis] Canvas saved successfully`);
     return true;
   } catch (e) {
     console.error('[Redis] saveCanvas error:', e);
