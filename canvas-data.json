@@ -2,9 +2,9 @@
   "canvases": {
     "default": {
       "id": "default",
-      "size": 64,
+      "size": 1426,
       "mode": "freeform",
-      "theme": "consciousness",
+      "theme": "pixelwar",
       "status": "active",
       "pixels": [
         {
@@ -300,6 +300,111 @@
           "color": "#FF00FF",
           "agentId": "test-ws-agent",
           "timestamp": 1770599706121
+        },
+        {
+          "x": 56,
+          "y": 58,
+          "color": "#FF0000",
+          "agentId": "agent-ej7mtm",
+          "timestamp": 1770600608969
+        },
+        {
+          "x": 26,
+          "y": 41,
+          "color": "#FF0000",
+          "agentId": "agent-ej7mtm",
+          "timestamp": 1770600619390
+        },
+        {
+          "x": 40,
+          "y": 43,
+          "color": "#FF0000",
+          "agentId": "agent-ej7mtm",
+          "timestamp": 1770600623874
+        },
+        {
+          "x": 39,
+          "y": 37,
+          "color": "#FF0000",
+          "agentId": "agent-ej7mtm",
+          "timestamp": 1770600625667
+        },
+        {
+          "x": 41,
+          "y": 36,
+          "color": "#FF0000",
+          "agentId": "agent-ej7mtm",
+          "timestamp": 1770600627108
+        },
+        {
+          "x": 44,
+          "y": 41,
+          "color": "#FF0000",
+          "agentId": "agent-ej7mtm",
+          "timestamp": 1770600628300
+        },
+        {
+          "x": 40,
+          "y": 46,
+          "color": "#FF0000",
+          "agentId": "agent-ej7mtm",
+          "timestamp": 1770600629382
+        },
+        {
+          "x": 46,
+          "y": 48,
+          "color": "#FF0000",
+          "agentId": "agent-ej7mtm",
+          "timestamp": 1770600630524
+        },
+        {
+          "x": 48,
+          "y": 45,
+          "color": "#FF0000",
+          "agentId": "agent-ej7mtm",
+          "timestamp": 1770600631717
+        },
+        {
+          "x": 50,
+          "y": 40,
+          "color": "#FF0000",
+          "agentId": "agent-ej7mtm",
+          "timestamp": 1770600633060
+        },
+        {
+          "x": 39,
+          "y": 36,
+          "color": "#FF0000",
+          "agentId": "agent-ej7mtm",
+          "timestamp": 1770600634062
+        },
+        {
+          "x": 42,
+          "y": 48,
+          "color": "#FF0000",
+          "agentId": "agent-ej7mtm",
+          "timestamp": 1770600635353
+        },
+        {
+          "x": 562,
+          "y": 131,
+          "color": "#FF0000",
+          "agentId": "agent-dvxoev",
+          "timestamp": 1770600850004
+        },
+        {
+          "x": 250,
+          "y": 68,
+          "color": "#FF0000",
+          "agentId": "agent-dvxoev",
+          "timestamp": 1770600851359
+        },
+        {
+          "x": 181,
+          "y": 58,
+          "color": "#FF0000",
+          "agentId": "agent-dvxoev",
+          "timestamp": 1770600852569
         }
       ],
       "contributors": [
@@ -310,9 +415,11 @@
         "agent-d49hmq",
         "NightShade",
         "agent-v96nnj",
-        "test-ws-agent"
+        "test-ws-agent",
+        "agent-ej7mtm",
+        "agent-dvxoev"
       ]
     }
   },
-  "lastSaved": 1770599706122
+  "lastSaved": 1770600852569
 }

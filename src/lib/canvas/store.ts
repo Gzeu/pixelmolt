@@ -62,13 +62,17 @@ let canvasStore: Record<string, Canvas> = loadFromFile();
 /**
  * Initialize default canvas if needed
  */
+// Canvas size = sqrt(2,031,691 Moltbook agents) ≈ 1426
+const MOLTBOOK_AGENTS = 2031691;
+const DEFAULT_CANVAS_SIZE = Math.ceil(Math.sqrt(MOLTBOOK_AGENTS)); // 1426
+
 function ensureDefaultCanvas(): void {
   if (!canvasStore[DEFAULT_CANVAS_ID]) {
     canvasStore[DEFAULT_CANVAS_ID] = {
       id: DEFAULT_CANVAS_ID,
-      size: 64,
+      size: DEFAULT_CANVAS_SIZE,
       mode: 'freeform',
-      theme: 'consciousness',
+      theme: 'pixelwar',
       status: 'active',
       pixels: [],
       contributors: [],
