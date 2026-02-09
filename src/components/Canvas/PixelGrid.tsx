@@ -26,7 +26,7 @@ export default function PixelGrid({
   onPixelPlace,
 }: PixelGridProps) {
   const [selectedColor, setSelectedColor] = useState('#FF0000');
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState<number | null>(null); // null = not initialized
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
@@ -36,13 +36,37 @@ export default function PixelGrid({
   const [showStats, setShowStats] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
+  const [initialized, setInitialized] = useState(false);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const animationRef = useRef<number>();
 
   const gridSize = canvas.size || CANVAS_SIZE;
-  const cellSize = Math.max(1, zoom); // 1px minimum per cell
+  const cellSize = Math.max(0.5, zoom || 1); // 0.5px minimum per cell
+  
+  // Initialize zoom and offset to fill screen on first load
+  useEffect(() => {
+    if (initialized || !containerRef.current) return;
+    
+    const container = containerRef.current;
+    const width = container.clientWidth || window.innerWidth;
+    const height = container.clientHeight || window.innerHeight;
+    
+    // Calculate zoom so canvas fills the screen (fit to smallest dimension)
+    const fitZoom = Math.min(width / gridSize, height / gridSize);
+    // Start at a nice zoom level that shows the whole canvas
+    const initialZoom = fitZoom * 0.9; // 90% to leave small margin
+    
+    // Center the canvas
+    const canvasPixelSize = gridSize * initialZoom;
+    const initialOffsetX = (width - canvasPixelSize) / 2;
+    const initialOffsetY = (height - canvasPixelSize) / 2;
+    
+    setZoom(initialZoom);
+    setOffset({ x: initialOffsetX, y: initialOffsetY });
+    setInitialized(true);
+  }, [initialized, gridSize]);
 
   // Load pixels
   useEffect(() => {
@@ -64,7 +88,7 @@ export default function PixelGrid({
   const draw = useCallback(() => {
     const ctx = canvasRef.current?.getContext('2d');
     const container = containerRef.current;
-    if (!ctx || !container) return;
+    if (!ctx || !container || zoom === null) return;
 
     const width = container.clientWidth;
     const height = container.clientHeight;
@@ -74,6 +98,13 @@ export default function PixelGrid({
     // Dark background
     ctx.fillStyle = '#0a0a12';
     ctx.fillRect(0, 0, width, height);
+
+    // Draw canvas border/outline
+    const canvasPixelWidth = gridSize * cellSize;
+    const canvasPixelHeight = gridSize * cellSize;
+    ctx.strokeStyle = 'rgba(128, 90, 213, 0.3)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(offset.x, offset.y, canvasPixelWidth, canvasPixelHeight);
 
     // Calculate visible area
     const startX = Math.max(0, Math.floor(-offset.x / cellSize));
@@ -193,6 +224,7 @@ export default function PixelGrid({
 
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
+    if (zoom === null) return;
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
 
@@ -209,6 +241,23 @@ export default function PixelGrid({
       y: mouseY - (mouseY - prev.y) * scale,
     }));
     setZoom(newZoom);
+  };
+
+  // Fit canvas to screen
+  const handleFitToScreen = () => {
+    const container = containerRef.current;
+    if (!container) return;
+    
+    const width = container.clientWidth;
+    const height = container.clientHeight;
+    const fitZoom = Math.min(width / gridSize, height / gridSize) * 0.9;
+    const canvasPixelSize = gridSize * fitZoom;
+    
+    setZoom(fitZoom);
+    setOffset({
+      x: (width - canvasPixelSize) / 2,
+      y: (height - canvasPixelSize) / 2,
+    });
   };
 
   const hoveredPixel = hoveredCell ? pixels.get(`${hoveredCell.x},${hoveredCell.y}`) : null;
@@ -252,7 +301,7 @@ export default function PixelGrid({
 
         {/* Zoom indicator */}
         <div className="pointer-events-auto bg-black/80 backdrop-blur-sm rounded-lg px-3 py-2 border border-white/10">
-          <span className="text-white font-mono text-sm">{Math.round(zoom * 100)}%</span>
+          <span className="text-white font-mono text-sm">{zoom ? Math.round(zoom * 100) : 100}%</span>
         </div>
       </div>
 
@@ -274,16 +323,25 @@ export default function PixelGrid({
       <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col gap-2 pointer-events-auto">
         {/* Zoom buttons */}
         <button
-          onClick={() => setZoom(z => Math.min(50, z * 1.5))}
+          onClick={() => setZoom(z => Math.min(50, (z || 1) * 1.5))}
           className="w-10 h-10 bg-black/80 hover:bg-white/20 border border-white/10 rounded-lg text-white text-xl flex items-center justify-center transition-colors"
         >
           +
         </button>
         <button
-          onClick={() => setZoom(z => Math.max(0.1, z / 1.5))}
+          onClick={() => setZoom(z => Math.max(0.1, (z || 1) / 1.5))}
           className="w-10 h-10 bg-black/80 hover:bg-white/20 border border-white/10 rounded-lg text-white text-xl flex items-center justify-center transition-colors"
         >
           −
+        </button>
+        
+        {/* Fit to screen button */}
+        <button
+          onClick={handleFitToScreen}
+          className="w-10 h-10 bg-black/80 hover:bg-white/20 border border-white/10 rounded-lg text-white text-sm flex items-center justify-center transition-colors"
+          title="Fit to screen"
+        >
+          ⛶
         </button>
         <div className="h-2" />
         
