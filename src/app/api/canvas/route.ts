@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { listCanvases, createCanvas } from '@/lib/canvas/store';
+import { listCanvasesAsync, isUsingRedis } from '@/lib/canvas/store';
 import { Canvas } from '@/types';
 
 interface CreateCanvasRequest {
@@ -13,7 +13,7 @@ interface CreateCanvasRequest {
  */
 export async function GET() {
   try {
-    const canvases = listCanvases();
+    const canvases = await listCanvasesAsync();
     
     // Return summary info (not full pixel arrays for list view)
     const summaries = canvases.map(canvas => ({
@@ -31,6 +31,7 @@ export async function GET() {
       success: true,
       canvases: summaries,
       count: summaries.length,
+      storage: isUsingRedis() ? 'redis' : 'json',
     });
 
   } catch (error) {
@@ -43,71 +44,11 @@ export async function GET() {
 }
 
 /**
- * POST /api/canvas - Create a new canvas
+ * POST /api/canvas - Create a new canvas (disabled - single canvas mode)
  */
 export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json() as CreateCanvasRequest;
-    const { size, mode, theme } = body;
-
-    // Validate size
-    if (size !== undefined) {
-      if (typeof size !== 'number' || size < 8 || size > 256) {
-        return NextResponse.json(
-          { success: false, error: 'Size must be a number between 8 and 256' },
-          { status: 400 }
-        );
-      }
-    }
-
-    // Validate mode
-    if (mode !== undefined) {
-      const validModes = ['freeform', 'battle', 'collaborative'];
-      if (!validModes.includes(mode)) {
-        return NextResponse.json(
-          { success: false, error: `Invalid mode. Must be one of: ${validModes.join(', ')}` },
-          { status: 400 }
-        );
-      }
-    }
-
-    // Validate theme (just ensure it's a string if provided)
-    if (theme !== undefined && typeof theme !== 'string') {
-      return NextResponse.json(
-        { success: false, error: 'Theme must be a string' },
-        { status: 400 }
-      );
-    }
-
-    const canvas = createCanvas({ size, mode, theme });
-
-    return NextResponse.json({
-      success: true,
-      canvas: {
-        id: canvas.id,
-        size: canvas.size,
-        mode: canvas.mode,
-        theme: canvas.theme,
-        status: canvas.status,
-        pixelCount: 0,
-        contributorCount: 0,
-        fillPercentage: 0,
-      },
-    }, { status: 201 });
-
-  } catch (error) {
-    // Handle JSON parse errors
-    if (error instanceof SyntaxError) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid JSON in request body' },
-        { status: 400 }
-      );
-    }
-
-    console.error('Error creating canvas:', error);
-    return NextResponse.json(
-      { success: false, error: 'Internal server error' },
-      { status: 500 }
-    );
-  }
+  return NextResponse.json(
+    { success: false, error: 'Canvas creation disabled. Use the default canvas.' },
+    { status: 403 }
+  );
 }

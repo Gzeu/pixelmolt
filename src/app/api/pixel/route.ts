@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { placePixel, getCanvas, isValidHexColor, checkRateLimit } from '@/lib/canvas/store';
+import { placePixel, getCanvasAsync, isValidHexColor, checkRateLimit, isUsingRedis } from '@/lib/canvas/store';
 
 interface PlacePixelRequest {
   canvasId: string;
@@ -7,6 +7,17 @@ interface PlacePixelRequest {
   y: number;
   color: string;
   agentId?: string;
+}
+
+/**
+ * GET /api/pixel - Get storage info
+ */
+export async function GET() {
+  return NextResponse.json({
+    success: true,
+    storage: isUsingRedis() ? 'redis' : 'json',
+    message: 'Use POST to place a pixel',
+  });
 }
 
 /**
@@ -57,7 +68,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Pre-check rate limit for better error handling
-    const rateCheck = checkRateLimit(effectiveAgentId);
+    const rateCheck = await checkRateLimit(effectiveAgentId);
     if (!rateCheck.allowed) {
       return NextResponse.json(
         { 
@@ -70,7 +81,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check canvas exists
-    const canvas = getCanvas(canvasId);
+    const canvas = await getCanvasAsync(canvasId);
     if (!canvas) {
       return NextResponse.json(
         { success: false, error: `Canvas not found: ${canvasId}` },
@@ -78,10 +89,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Place the pixel
-    const result = placePixel({
+    // Place the pixel (now async)
+    const result = await placePixel({
       canvasId,
-      x: Math.floor(x), // Ensure integer coordinates
+      x: Math.floor(x),
       y: Math.floor(y),
       color,
       agentId: effectiveAgentId,
@@ -98,10 +109,10 @@ export async function POST(request: NextRequest) {
       success: true,
       pixel: result.pixel,
       canvas: result.canvas,
+      storage: isUsingRedis() ? 'redis' : 'json',
     });
 
   } catch (error) {
-    // Handle JSON parse errors
     if (error instanceof SyntaxError) {
       return NextResponse.json(
         { success: false, error: 'Invalid JSON in request body' },

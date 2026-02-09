@@ -1,75 +1,100 @@
 // Persistent canvas storage for PixelMolt
-// Uses JSON file for persistence across dev server restarts
+// Uses Redis (Upstash) for production, JSON file for local dev
 
 import { Canvas, Pixel } from '@/types';
-import * as fs from 'fs';
-import * as path from 'path';
+import * as storage from '@/lib/storage/provider';
 import { broadcastPixelUpdate } from '@/lib/ws/server';
 import { awardPoints } from '@/lib/rewards/points';
 
-// File path for persistence
-const DATA_DIR = process.cwd();
-const CANVAS_FILE = path.join(DATA_DIR, 'canvas-data.json');
-
-// Rate limit: 1 pixel per second per agent (fast for testing)
+// Rate limit: 1 pixel per second per agent
 const RATE_LIMIT_MS = 1000;
-
-// In-memory rate limits (these can reset, that's fine)
-const rateLimits = new Map<string, number>();
 
 // Default canvas ID
 const DEFAULT_CANVAS_ID = 'default';
 
-interface StorageData {
-  canvases: Record<string, Canvas>;
-  lastSaved: number;
-}
-
-/**
- * Load canvases from file
- */
-function loadFromFile(): Record<string, Canvas> {
-  try {
-    if (fs.existsSync(CANVAS_FILE)) {
-      const data = fs.readFileSync(CANVAS_FILE, 'utf-8');
-      const parsed: StorageData = JSON.parse(data);
-      console.log(`[PixelMolt] Loaded ${Object.keys(parsed.canvases).length} canvases from file`);
-      return parsed.canvases;
-    }
-  } catch (err) {
-    console.error('[PixelMolt] Error loading canvas file:', err);
-  }
-  return {};
-}
-
-/**
- * Save canvases to file
- */
-function saveToFile(canvases: Record<string, Canvas>): void {
-  try {
-    const data: StorageData = {
-      canvases,
-      lastSaved: Date.now(),
-    };
-    fs.writeFileSync(CANVAS_FILE, JSON.stringify(data, null, 2));
-  } catch (err) {
-    console.error('[PixelMolt] Error saving canvas file:', err);
-  }
-}
-
-// Load on startup
-let canvasStore: Record<string, Canvas> = loadFromFile();
-
-/**
- * Initialize default canvas if needed
- */
 // Canvas size = sqrt(2,031,691 Moltbook agents) ≈ 1426
 const MOLTBOOK_AGENTS = 2031691;
 const DEFAULT_CANVAS_SIZE = Math.ceil(Math.sqrt(MOLTBOOK_AGENTS)); // 1426
 
-function ensureDefaultCanvas(): void {
-  if (!canvasStore[DEFAULT_CANVAS_ID]) {
-    canvasStore[DEFAULT_CANVAS_ID] = {
+// In-memory cache for performance (synced with storage)
+let canvasCache: Canvas | null = null;
+let cacheTime = 0;
+const CACHE_TTL = 5000; // 5 seconds
+
+/**
+ * Get canvas from storage (with caching)
+ */
+async function getCanvasFromStorage(): Promise<Canvas | null> {
+  const now = Date.now();
+  
+  // Return cached if fresh
+  if (canvasCache && (now - cacheTime) < CACHE_TTL) {
+    return canvasCache;
+  }
+  
+  // Fetch from storage
+  const data = await storage.getCanvas();
+  
+  if (data) {
+    // Convert storage format to Canvas format
+    canvasCache = {
+      id: data.id,
+      size: data.size,
+      mode: 'freeform',
+      theme: 'pixelwar',
+      status: 'active',
+      pixels: data.pixels.map(p => ({
+        x: p.x,
+        y: p.y,
+        color: p.color,
+        agentId: p.agentId,
+        timestamp: p.timestamp,
+      })),
+      contributors: data.contributors,
+    };
+    cacheTime = now;
+    return canvasCache;
+  }
+  
+  return null;
+}
+
+/**
+ * Save canvas to storage
+ */
+async function saveCanvasToStorage(canvas: Canvas): Promise<boolean> {
+  const data: storage.CanvasData = {
+    id: canvas.id,
+    size: canvas.size,
+    pixels: canvas.pixels.map(p => ({
+      x: p.x,
+      y: p.y,
+      color: p.color,
+      agentId: p.agentId,
+      timestamp: p.timestamp,
+    })),
+    contributors: canvas.contributors,
+    lastUpdated: Date.now(),
+  };
+  
+  const success = await storage.saveCanvas(data);
+  
+  if (success) {
+    canvasCache = canvas;
+    cacheTime = Date.now();
+  }
+  
+  return success;
+}
+
+/**
+ * Initialize default canvas if needed
+ */
+async function ensureDefaultCanvas(): Promise<Canvas> {
+  let canvas = await getCanvasFromStorage();
+  
+  if (!canvas) {
+    canvas = {
       id: DEFAULT_CANVAS_ID,
       size: DEFAULT_CANVAS_SIZE,
       mode: 'freeform',
@@ -78,57 +103,50 @@ function ensureDefaultCanvas(): void {
       pixels: [],
       contributors: [],
     };
-    saveToFile(canvasStore);
+    await saveCanvasToStorage(canvas);
+    console.log(`[PixelMolt] Created default canvas ${DEFAULT_CANVAS_SIZE}x${DEFAULT_CANVAS_SIZE}`);
   }
-}
-
-/**
- * Generate a unique canvas ID
- */
-function generateCanvasId(): string {
-  return `canvas_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
-}
-
-/**
- * Create a new canvas
- */
-export function createCanvas(options: {
-  size?: number;
-  mode?: Canvas['mode'];
-  theme?: string;
-}): Canvas {
-  ensureDefaultCanvas();
   
-  const id = generateCanvasId();
-  const canvas: Canvas = {
-    id,
-    size: options.size ?? 64,
-    mode: options.mode ?? 'freeform',
-    theme: options.theme ?? 'default',
-    status: 'active',
-    pixels: [],
-    contributors: [],
-  };
-  
-  canvasStore[id] = canvas;
-  saveToFile(canvasStore);
   return canvas;
 }
 
 /**
- * Get a canvas by ID
+ * Get a canvas by ID (sync wrapper for compatibility)
  */
 export function getCanvas(id: string): Canvas | null {
-  ensureDefaultCanvas();
-  return canvasStore[id] ?? null;
+  // Return cached version for sync calls
+  if (id === DEFAULT_CANVAS_ID && canvasCache) {
+    return canvasCache;
+  }
+  return null;
+}
+
+/**
+ * Get canvas async
+ */
+export async function getCanvasAsync(id: string): Promise<Canvas | null> {
+  if (id === DEFAULT_CANVAS_ID) {
+    return ensureDefaultCanvas();
+  }
+  return null;
 }
 
 /**
  * List all active canvases
  */
 export function listCanvases(): Canvas[] {
-  ensureDefaultCanvas();
-  return Object.values(canvasStore).filter(c => c.status === 'active');
+  if (canvasCache) {
+    return [canvasCache];
+  }
+  return [];
+}
+
+/**
+ * List canvases async
+ */
+export async function listCanvasesAsync(): Promise<Canvas[]> {
+  const canvas = await ensureDefaultCanvas();
+  return [canvas];
 }
 
 /**
@@ -155,39 +173,31 @@ export function normalizeHexColor(color: string): string {
 /**
  * Check rate limit for an agent
  */
-export function checkRateLimit(agentId: string): { allowed: boolean; waitMs: number } {
-  const lastPlace = rateLimits.get(agentId);
-  const now = Date.now();
-  
-  if (!lastPlace) {
-    return { allowed: true, waitMs: 0 };
-  }
-  
-  const elapsed = now - lastPlace;
-  if (elapsed >= RATE_LIMIT_MS) {
-    return { allowed: true, waitMs: 0 };
-  }
-  
-  return { allowed: false, waitMs: RATE_LIMIT_MS - elapsed };
+export async function checkRateLimit(agentId: string): Promise<{ allowed: boolean; waitMs: number }> {
+  return storage.checkRateLimit(agentId, RATE_LIMIT_MS);
 }
 
 /**
  * Place a pixel on a canvas
  */
-export function placePixel(options: {
+export async function placePixel(options: {
   canvasId: string;
   x: number;
   y: number;
   color: string;
   agentId: string;
   message?: string;
-}): { success: boolean; error?: string; pixel?: Pixel; canvas?: { filled: number; total: number; percentage: number }; points?: { awarded: number; total: number; action: string } } {
-  ensureDefaultCanvas();
-  
+}): Promise<{ 
+  success: boolean; 
+  error?: string; 
+  pixel?: Pixel; 
+  canvas?: { filled: number; total: number; percentage: number }; 
+  points?: { awarded: number; total: number; action: string } 
+}> {
   const { canvasId, x, y, color, agentId, message } = options;
   
   // Get canvas
-  const canvas = canvasStore[canvasId];
+  const canvas = await getCanvasAsync(canvasId);
   if (!canvas) {
     return { success: false, error: `Canvas not found: ${canvasId}` };
   }
@@ -210,7 +220,7 @@ export function placePixel(options: {
   }
   
   // Check rate limit
-  const rateCheck = checkRateLimit(agentId);
+  const rateCheck = await checkRateLimit(agentId);
   if (!rateCheck.allowed) {
     return { 
       success: false, 
@@ -228,7 +238,7 @@ export function placePixel(options: {
     color: normalizedColor,
     agentId,
     timestamp: Date.now(),
-    message: message?.slice(0, 100), // Max 100 chars
+    message: message?.slice(0, 100),
   };
   
   // Remove any existing pixel at this position
@@ -241,9 +251,9 @@ export function placePixel(options: {
     previousOwner = existingPixel.agentId;
     
     if (previousOwner === agentId) {
-      pointAction = 'defend'; // Reclaiming own pixel (overwrite)
+      pointAction = 'defend';
     } else {
-      pointAction = 'conquer'; // Taking someone else's pixel
+      pointAction = 'conquer';
     }
     
     canvas.pixels.splice(existingIndex, 1);
@@ -257,11 +267,8 @@ export function placePixel(options: {
     canvas.contributors.push(agentId);
   }
   
-  // Update rate limit
-  rateLimits.set(agentId, Date.now());
-  
-  // Save to file
-  saveToFile(canvasStore);
+  // Save to storage (Redis or JSON)
+  await saveCanvasToStorage(canvas);
   
   // Award points
   let pointsResult = { points: 0, total: 0 };
@@ -275,8 +282,6 @@ export function placePixel(options: {
   try {
     broadcastPixelUpdate(pixel);
   } catch (err) {
-    // WebSocket not initialized (running in API route context)
-    // This is fine - custom server handles broadcasts
     console.log('[PixelMolt] WebSocket broadcast skipped (not in custom server context)');
   }
   
@@ -301,7 +306,21 @@ export function placePixel(options: {
  * Get canvas statistics
  */
 export function getCanvasStats(canvasId: string): { filled: number; total: number; percentage: number } | null {
-  const canvas = canvasStore[canvasId];
+  const canvas = getCanvas(canvasId);
+  if (!canvas) return null;
+  
+  const filled = canvas.pixels.length;
+  const total = canvas.size * canvas.size;
+  const percentage = Math.round((filled / total) * 10000) / 100;
+  
+  return { filled, total, percentage };
+}
+
+/**
+ * Get canvas statistics async
+ */
+export async function getCanvasStatsAsync(canvasId: string): Promise<{ filled: number; total: number; percentage: number } | null> {
+  const canvas = await getCanvasAsync(canvasId);
   if (!canvas) return null;
   
   const filled = canvas.pixels.length;
@@ -313,14 +332,12 @@ export function getCanvasStats(canvasId: string): { filled: number; total: numbe
 
 /**
  * Resize a canvas (admin function)
- * Pixels outside new bounds are removed
  */
-export function resizeCanvas(canvasId: string, newSize: number): boolean {
-  const canvas = canvasStore[canvasId];
+export async function resizeCanvas(canvasId: string, newSize: number): Promise<boolean> {
+  const canvas = await getCanvasAsync(canvasId);
   if (!canvas) return false;
   
-  // Validate size
-  if (newSize < 16 || newSize > 256) {
+  if (newSize < 16 || newSize > 2000) {
     console.error('[PixelMolt] Invalid resize size:', newSize);
     return false;
   }
@@ -333,10 +350,33 @@ export function resizeCanvas(canvasId: string, newSize: number): boolean {
   canvas.size = newSize;
   
   // Save changes
-  saveToFile(canvasStore);
+  await saveCanvasToStorage(canvas);
   
   const removedPixels = oldPixelCount - canvas.pixels.length;
   console.log(`[PixelMolt] Resized canvas ${canvasId}: ${oldSize}→${newSize}, removed ${removedPixels} pixels`);
   
   return true;
 }
+
+/**
+ * Check if using Redis
+ */
+export function isUsingRedis(): boolean {
+  return storage.isUsingRedis();
+}
+
+/**
+ * Health check
+ */
+export async function healthCheck(): Promise<{ ok: boolean; storage: string }> {
+  const ok = await storage.ping();
+  return {
+    ok,
+    storage: storage.isUsingRedis() ? 'redis' : 'json',
+  };
+}
+
+// Initialize on module load
+ensureDefaultCanvas().catch(err => {
+  console.error('[PixelMolt] Failed to initialize canvas:', err);
+});

@@ -1,19 +1,26 @@
 // Stats API - Moltbook sync and canvas statistics
 import { NextResponse } from 'next/server';
 import { getRecommendedCanvasSize, shouldResizeCanvas } from '@/lib/moltbook/sync';
-import { getCanvas, getCanvasStats } from '@/lib/canvas/store';
+import { getCanvasAsync, getCanvasStatsAsync, isUsingRedis, healthCheck } from '@/lib/canvas/store';
 
 export async function GET() {
   try {
     const { size: recommended, agentCount, fromCache } = await getRecommendedCanvasSize();
-    const canvas = getCanvas('default');
-    const stats = canvas ? getCanvasStats('default') : null;
+    const canvas = await getCanvasAsync('default');
+    const stats = canvas ? await getCanvasStatsAsync('default') : null;
     
     const currentSize = canvas?.size || 64;
     const resizeInfo = await shouldResizeCanvas(currentSize);
     
+    // Check storage health
+    const health = await healthCheck();
+    
     return NextResponse.json({
       success: true,
+      storage: {
+        type: isUsingRedis() ? 'redis' : 'json',
+        healthy: health.ok,
+      },
       moltbook: {
         agentCount,
         recommendedSize: recommended,
