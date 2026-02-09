@@ -2,13 +2,19 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { PixelGrid } from '@/components/Canvas';
+import { useAuth } from '@/components/Auth';
 import type { Canvas } from '@/types';
 
 export default function Home() {
+  const { agent, isAuthenticated } = useAuth();
   const [canvas, setCanvas] = useState<Canvas | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [agentId] = useState(() => `agent-${Math.random().toString(36).substr(2, 6)}`);
+  const [anonymousId] = useState(() => `agent-${Math.random().toString(36).substr(2, 6)}`);
+  
+  // Use authenticated agent name or anonymous ID
+  const agentId = isAuthenticated && agent ? agent.name : anonymousId;
+  const apiKey = isAuthenticated && agent ? agent.apiKey : null;
 
   // Fetch canvas data
   const fetchCanvas = useCallback(async () => {

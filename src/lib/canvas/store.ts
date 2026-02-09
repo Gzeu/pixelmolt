@@ -5,6 +5,7 @@ import { Canvas, Pixel } from '@/types';
 import * as fs from 'fs';
 import * as path from 'path';
 import { broadcastPixelUpdate } from '@/lib/ws/server';
+import { awardPoints } from '@/lib/rewards/points';
 
 // File path for persistence
 const DATA_DIR = process.cwd();
@@ -180,7 +181,7 @@ export function placePixel(options: {
   color: string;
   agentId: string;
   message?: string;
-}): { success: boolean; error?: string; pixel?: Pixel; canvas?: { filled: number; total: number; percentage: number } } {
+}): { success: boolean; error?: string; pixel?: Pixel; canvas?: { filled: number; total: number; percentage: number }; points?: { awarded: number; total: number; action: string } } {
   ensureDefaultCanvas();
   
   const { canvasId, x, y, color, agentId, message } = options;
@@ -232,7 +233,19 @@ export function placePixel(options: {
   
   // Remove any existing pixel at this position
   const existingIndex = canvas.pixels.findIndex(p => p.x === x && p.y === y);
+  let previousOwner: string | undefined;
+  let pointAction: 'place' | 'conquer' | 'defend' = 'place';
+  
   if (existingIndex !== -1) {
+    const existingPixel = canvas.pixels[existingIndex];
+    previousOwner = existingPixel.agentId;
+    
+    if (previousOwner === agentId) {
+      pointAction = 'defend'; // Reclaiming own pixel (overwrite)
+    } else {
+      pointAction = 'conquer'; // Taking someone else's pixel
+    }
+    
     canvas.pixels.splice(existingIndex, 1);
   }
   
@@ -249,6 +262,14 @@ export function placePixel(options: {
   
   // Save to file
   saveToFile(canvasStore);
+  
+  // Award points
+  let pointsResult = { points: 0, total: 0 };
+  try {
+    pointsResult = awardPoints(agentId, pointAction, previousOwner);
+  } catch (err) {
+    console.log('[PixelMolt] Points award skipped:', err);
+  }
   
   // Broadcast pixel update via WebSocket
   try {
@@ -268,6 +289,11 @@ export function placePixel(options: {
     success: true,
     pixel,
     canvas: { filled, total, percentage },
+    points: { 
+      awarded: pointsResult.points, 
+      total: pointsResult.total, 
+      action: pointAction 
+    },
   };
 }
 

@@ -1,7 +1,20 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useCanvasSocket } from '@/hooks/useCanvasSocket';
+import { useAuth } from '@/components/Auth';
+import { AuthModal } from '@/components/Auth';
 import type { Pixel, Canvas } from '@/types';
+
+// Time formatting helper
+function formatTimeAgo(timestamp: number): string {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+  if (seconds < 5) return 'now';
+  if (seconds < 60) return `${seconds}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+  return `${Math.floor(seconds / 86400)}d`;
+}
 
 interface PixelGridProps {
   canvas: Canvas;
@@ -9,9 +22,8 @@ interface PixelGridProps {
   onPixelPlace?: (x: number, y: number, color: string) => void;
 }
 
-// Canvas: 2,031,691 agents = 1426x1426 grid
-const MOLTBOOK_AGENTS = 2031691;
-const CANVAS_SIZE = Math.ceil(Math.sqrt(MOLTBOOK_AGENTS)); // 1426
+// Default fallback - will be updated from API
+const DEFAULT_AGENT_COUNT = 2031691;
 
 const COLORS = [
   '#FF0000', '#FF8800', '#FFFF00', '#88FF00',
@@ -25,6 +37,8 @@ export default function PixelGrid({
   currentAgentId,
   onPixelPlace,
 }: PixelGridProps) {
+  const { agent, isAuthenticated } = useAuth();
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const [selectedColor, setSelectedColor] = useState('#FF0000');
   const [zoom, setZoom] = useState<number | null>(null); // null = not initialized
   const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -37,13 +51,39 @@ export default function PixelGrid({
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [initialized, setInitialized] = useState(false);
+  const [moltbookAgents, setMoltbookAgents] = useState(DEFAULT_AGENT_COUNT);
+  const [dailyTheme, setDailyTheme] = useState<any>(null);
+  const [showActivity, setShowActivity] = useState(false);
+  const [recentActivity, setRecentActivity] = useState<Pixel[]>([]);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const animationRef = useRef<number>();
+  const animationRef = useRef<number | undefined>(undefined);
 
-  const gridSize = canvas.size || CANVAS_SIZE;
+  const gridSize = canvas.size || Math.ceil(Math.sqrt(moltbookAgents));
   const cellSize = Math.max(0.5, zoom || 1); // 0.5px minimum per cell
+  
+  // Fetch Moltbook agent count
+  useEffect(() => {
+    fetch('/api/moltbook/agents')
+      .then(r => r.json())
+      .then(d => {
+        if (d.success && d.count) {
+          setMoltbookAgents(d.count);
+        }
+      })
+      .catch(() => {});
+      
+    // Fetch daily theme
+    fetch('/api/theme')
+      .then(r => r.json())
+      .then(d => {
+        if (d.success && d.theme) {
+          setDailyTheme(d.theme);
+        }
+      })
+      .catch(() => {});
+  }, []);
   
   // Initialize zoom and offset to fill screen on first load
   useEffect(() => {
@@ -75,7 +115,24 @@ export default function PixelGrid({
       pixelMap.set(`${pixel.x},${pixel.y}`, pixel);
     });
     setPixels(pixelMap);
+    // Initialize activity with recent pixels
+    const sorted = [...canvas.pixels].sort((a, b) => b.timestamp - a.timestamp);
+    setRecentActivity(sorted.slice(0, 20));
   }, [canvas.pixels]);
+
+  // WebSocket real-time updates
+  const handlePixelUpdate = useCallback((pixel: Pixel) => {
+    const key = `${pixel.x},${pixel.y}`;
+    setPixels(prev => {
+      const next = new Map(prev);
+      next.set(key, pixel);
+      return next;
+    });
+    // Add to activity feed
+    setRecentActivity(prev => [pixel, ...prev.slice(0, 19)]);
+  }, []);
+
+  const { connected } = useCanvasSocket(handlePixelUpdate);
 
   // Fetch leaderboard
   useEffect(() => {
@@ -293,8 +350,14 @@ export default function PixelGrid({
               </div>
               <div className="ml-4 text-xs">
                 <div className="text-green-400">● LIVE</div>
-                <div className="text-gray-500">{MOLTBOOK_AGENTS.toLocaleString()} agents</div>
+                <div className="text-gray-500">{moltbookAgents.toLocaleString()} agents</div>
               </div>
+              {dailyTheme && (
+                <div className="ml-4 text-xs border-l border-white/20 pl-4">
+                  <div className="text-purple-400">{dailyTheme.emoji} {dailyTheme.name}</div>
+                  <div className="text-gray-500">{dailyTheme.bonusMultiplier}× bonus</div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -369,11 +432,42 @@ export default function PixelGrid({
         >
           📊
         </button>
+        
+        {/* Activity toggle */}
+        <button
+          onClick={() => setShowActivity(!showActivity)}
+          className={`w-10 h-10 bg-black/80 hover:bg-white/20 border border-white/10 rounded-lg text-xl flex items-center justify-center transition-colors ${showActivity ? 'bg-green-600/50' : ''}`}
+        >
+          📡
+        </button>
       </div>
 
       {/* Color Picker Popup */}
       {showColorPicker && (
         <div className="absolute right-16 top-1/2 -translate-y-1/2 bg-black/90 backdrop-blur-sm rounded-xl p-3 border border-white/10 pointer-events-auto">
+          {/* Theme Colors Section */}
+          {dailyTheme && dailyTheme.colors && dailyTheme.colors.length > 0 && (
+            <div className="mb-3 pb-2 border-b border-white/10">
+              <div className="text-xs text-purple-400 mb-1 flex items-center gap-1">
+                {dailyTheme.emoji} Theme Colors <span className="text-yellow-400">({dailyTheme.bonusMultiplier}× pts)</span>
+              </div>
+              <div className="grid grid-cols-6 gap-1">
+                {dailyTheme.colors.map((color: string) => (
+                  <button
+                    key={`theme-${color}`}
+                    onClick={() => setSelectedColor(color)}
+                    className={`w-7 h-7 rounded transition-transform hover:scale-110 relative ${selectedColor === color ? 'ring-2 ring-yellow-400' : ''}`}
+                    style={{ backgroundColor: color }}
+                    title={`${color} (${dailyTheme.bonusMultiplier}× bonus)`}
+                  >
+                    <span className="absolute -top-1 -right-1 text-[8px]">⭐</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {/* Standard Colors */}
+          <div className="text-xs text-gray-500 mb-1">All Colors</div>
           <div className="grid grid-cols-4 gap-1">
             {COLORS.map(color => (
               <button
@@ -433,16 +527,68 @@ export default function PixelGrid({
         </div>
       )}
 
+      {/* Activity Feed Panel */}
+      {showActivity && (
+        <div className="absolute left-4 top-24 bg-black/90 backdrop-blur-sm rounded-xl p-4 border border-white/10 pointer-events-auto w-72 max-h-80 overflow-y-auto">
+          <h3 className="text-white font-bold mb-2 flex items-center gap-2">
+            <span className="animate-pulse">📡</span> Live Activity
+            <span className={`ml-auto text-xs ${connected ? 'text-green-400' : 'text-yellow-400'}`}>
+              {connected ? '● Connected' : '○ Polling'}
+            </span>
+          </h3>
+          {recentActivity.length === 0 ? (
+            <p className="text-gray-500 text-sm italic">No recent activity...</p>
+          ) : (
+            <div className="space-y-2">
+              {recentActivity.slice(0, 15).map((pixel, i) => (
+                <div key={`${pixel.x}-${pixel.y}-${pixel.timestamp}`} 
+                     className={`flex items-center gap-2 text-xs py-1 px-2 rounded ${i === 0 ? 'bg-purple-900/30 border-l-2 border-purple-500' : 'bg-gray-800/30'}`}>
+                  <div className="w-4 h-4 rounded flex-shrink-0" style={{ backgroundColor: pixel.color }} />
+                  <span className="text-gray-300 truncate">{pixel.agentId.slice(0, 12)}</span>
+                  <span className="text-gray-500">@</span>
+                  <span className="text-purple-400 font-mono">({pixel.x},{pixel.y})</span>
+                  <span className="text-gray-600 ml-auto text-[10px]">{formatTimeAgo(pixel.timestamp)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Instructions overlay (shows briefly) */}
       <div className="absolute bottom-4 right-4 text-gray-500 text-xs pointer-events-none">
         Drag to pan • Scroll to zoom • Click to place
       </div>
 
-      {/* Your agent ID */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-sm rounded-lg px-3 py-1 border border-white/10">
-        <span className="text-gray-400 text-xs">You: </span>
-        <span className="text-purple-400 text-xs font-mono">{currentAgentId}</span>
+      {/* Your agent ID / Login button */}
+      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 pointer-events-auto">
+        {isAuthenticated && agent ? (
+          <button 
+            onClick={() => setShowAuthModal(true)}
+            className="bg-black/60 backdrop-blur-sm rounded-lg px-3 py-1 border border-green-500/30 hover:border-green-500/50 transition-colors"
+          >
+            <span className="text-green-400 text-xs">✓ </span>
+            <span className="text-white text-xs font-medium">{agent.name}</span>
+            <span className="text-gray-500 text-xs ml-1">({agent.tier})</span>
+          </button>
+        ) : (
+          <>
+            <div className="bg-black/60 backdrop-blur-sm rounded-lg px-3 py-1 border border-white/10">
+              <span className="text-gray-400 text-xs">You: </span>
+              <span className="text-purple-400 text-xs font-mono">{currentAgentId}</span>
+            </div>
+            <button
+              onClick={() => setShowAuthModal(true)}
+              className="bg-purple-600 hover:bg-purple-700 rounded-lg px-3 py-1 text-white text-xs font-medium transition-colors"
+            >
+              🔑 Login / Register
+            </button>
+          </>
+        )}
       </div>
+
+      {/* Auth Modal */}
+      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
     </div>
   );
 }
