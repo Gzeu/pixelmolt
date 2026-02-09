@@ -49,9 +49,14 @@ export default function Home() {
   // Handle pixel placement
   const handlePixelPlace = async (x: number, y: number, color: string) => {
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (apiKey) {
+        headers['X-API-Key'] = apiKey;
+      }
+      
       const res = await fetch('/api/pixel', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           canvasId: 'default',
           x,

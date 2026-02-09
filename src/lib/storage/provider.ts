@@ -1,136 +1,196 @@
-/**
- * Storage Provider Abstraction
- * 
- * Allows swapping between file-based storage (local dev) and 
- * cloud storage (Vercel KV, Redis, PostgreSQL) for production.
- */
+// Storage provider - switches between JSON (dev) and Redis (prod)
 
 import * as fs from 'fs';
 import * as path from 'path';
 
-export interface StorageProvider {
-  get<T = unknown>(key: string): Promise<T | null>;
-  set<T = unknown>(key: string, value: T): Promise<void>;
-  delete(key: string): Promise<void>;
-  exists(key: string): Promise<boolean>;
+// Check if Redis is configured
+const USE_REDIS = !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+
+// Types
+export interface Pixel {
+  x: number;
+  y: number;
+  color: string;
+  agentId: string;
+  timestamp: number;
 }
 
-/**
- * File-based storage for local development
- * 
- * ⚠️ WARNING: This will NOT persist on Vercel's ephemeral filesystem!
- * Use only for local dev or accept that data resets on each deploy.
- */
-export class FileStorage implements StorageProvider {
-  private basePath: string;
+export interface CanvasData {
+  id: string;
+  size: number;
+  pixels: Pixel[];
+  contributors: string[];
+  lastUpdated: number;
+}
 
-  constructor(basePath?: string) {
-    this.basePath = basePath || process.cwd();
-  }
+export interface AgentData {
+  id: string;
+  name: string;
+  apiKey: string;
+  tier: 'anonymous' | 'registered' | 'verified';
+  pixelsPlaced: number;
+  karma: number;
+  createdAt: number;
+  moltbookUsername?: string;
+}
 
-  private getFilePath(key: string): string {
-    // Sanitize key to be a valid filename
-    const safeKey = key.replace(/[^a-zA-Z0-9-_]/g, '_');
-    return path.join(this.basePath, `${safeKey}.json`);
-  }
+// ============ JSON STORAGE (Development) ============
 
-  async get<T = unknown>(key: string): Promise<T | null> {
-    const filePath = this.getFilePath(key);
-    try {
-      if (!fs.existsSync(filePath)) {
-        return null;
-      }
-      const data = fs.readFileSync(filePath, 'utf-8');
-      return JSON.parse(data) as T;
-    } catch {
-      return null;
+const DATA_DIR = process.cwd();
+const CANVAS_FILE = path.join(DATA_DIR, 'canvas-data.json');
+const AUTH_FILE = path.join(DATA_DIR, 'auth-data.json');
+
+function loadJsonFile<T>(filepath: string, defaultValue: T): T {
+  try {
+    if (fs.existsSync(filepath)) {
+      return JSON.parse(fs.readFileSync(filepath, 'utf-8'));
     }
+  } catch (e) {
+    console.error(`[Storage] Error loading ${filepath}:`, e);
   }
+  return defaultValue;
+}
 
-  async set<T = unknown>(key: string, value: T): Promise<void> {
-    const filePath = this.getFilePath(key);
-    fs.writeFileSync(filePath, JSON.stringify(value, null, 2));
-  }
-
-  async delete(key: string): Promise<void> {
-    const filePath = this.getFilePath(key);
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-  }
-
-  async exists(key: string): Promise<boolean> {
-    const filePath = this.getFilePath(key);
-    return fs.existsSync(filePath);
+function saveJsonFile<T>(filepath: string, data: T): void {
+  try {
+    fs.writeFileSync(filepath, JSON.stringify(data, null, 2));
+  } catch (e) {
+    console.error(`[Storage] Error saving ${filepath}:`, e);
   }
 }
 
-/**
- * In-Memory storage for serverless environments
- * 
- * Data persists within a single function invocation but resets
- * between cold starts. Useful for caching within requests.
- */
-export class MemoryStorage implements StorageProvider {
-  private store: Map<string, unknown> = new Map();
+// ============ UNIFIED API ============
 
-  async get<T = unknown>(key: string): Promise<T | null> {
-    const value = this.store.get(key);
-    return (value as T) ?? null;
+export async function getCanvas(): Promise<CanvasData | null> {
+  if (USE_REDIS) {
+    const { getCanvas: redisGetCanvas } = await import('./redis');
+    return redisGetCanvas();
   }
-
-  async set<T = unknown>(key: string, value: T): Promise<void> {
-    this.store.set(key, value);
-  }
-
-  async delete(key: string): Promise<void> {
-    this.store.delete(key);
-  }
-
-  async exists(key: string): Promise<boolean> {
-    return this.store.has(key);
-  }
+  
+  const data = loadJsonFile<{ canvases: Record<string, CanvasData> }>(CANVAS_FILE, { canvases: {} });
+  return data.canvases['default'] || null;
 }
 
-/**
- * Future: Redis/Vercel KV Storage
- * 
- * Uncomment and configure when ready for production persistence.
- * 
- * Required env vars:
- * - KV_REST_API_URL
- * - KV_REST_API_TOKEN
- */
-// export class KVStorage implements StorageProvider {
-//   async get<T = unknown>(key: string): Promise<T | null> {
-//     // const { kv } = await import('@vercel/kv');
-//     // return await kv.get(key);
-//   }
-//   async set<T = unknown>(key: string, value: T): Promise<void> {
-//     // const { kv } = await import('@vercel/kv');
-//     // await kv.set(key, value);
-//   }
-//   async delete(key: string): Promise<void> {
-//     // const { kv } = await import('@vercel/kv');
-//     // await kv.del(key);
-//   }
-//   async exists(key: string): Promise<boolean> {
-//     // const { kv } = await import('@vercel/kv');
-//     // return (await kv.exists(key)) > 0;
-//   }
-// }
-
-// Default export - use FileStorage for now
-// Switch to KVStorage for production Vercel deployment
-let storageInstance: StorageProvider | null = null;
-
-export function getStorage(): StorageProvider {
-  if (!storageInstance) {
-    storageInstance = new FileStorage();
+export async function saveCanvas(canvas: CanvasData): Promise<boolean> {
+  if (USE_REDIS) {
+    const { saveCanvas: redisSaveCanvas } = await import('./redis');
+    return redisSaveCanvas(canvas);
   }
-  return storageInstance;
+  
+  const data = loadJsonFile<{ canvases: Record<string, CanvasData> }>(CANVAS_FILE, { canvases: {} });
+  data.canvases[canvas.id] = canvas;
+  saveJsonFile(CANVAS_FILE, data);
+  return true;
 }
 
-export function setStorage(provider: StorageProvider): void {
-  storageInstance = provider;
+export async function initCanvas(size: number = 1426): Promise<CanvasData> {
+  const existing = await getCanvas();
+  if (existing) return existing;
+
+  const canvas: CanvasData = {
+    id: 'default',
+    size,
+    pixels: [],
+    contributors: [],
+    lastUpdated: Date.now(),
+  };
+  await saveCanvas(canvas);
+  return canvas;
+}
+
+export async function addPixel(pixel: Pixel): Promise<{ success: boolean; conquered?: string }> {
+  if (USE_REDIS) {
+    const { addPixel: redisAddPixel } = await import('./redis');
+    return redisAddPixel(pixel);
+  }
+
+  const canvas = await getCanvas();
+  if (!canvas) return { success: false };
+
+  const existingIdx = canvas.pixels.findIndex(p => p.x === pixel.x && p.y === pixel.y);
+  let conquered: string | undefined;
+
+  if (existingIdx !== -1) {
+    conquered = canvas.pixels[existingIdx].agentId;
+    canvas.pixels.splice(existingIdx, 1);
+  }
+
+  canvas.pixels.push(pixel);
+  if (!canvas.contributors.includes(pixel.agentId)) {
+    canvas.contributors.push(pixel.agentId);
+  }
+
+  await saveCanvas(canvas);
+  return { success: true, conquered };
+}
+
+// Rate limits (in-memory for dev, Redis for prod)
+const memoryRateLimits = new Map<string, number>();
+
+export async function checkRateLimit(agentId: string, limitMs: number = 1000): Promise<{ allowed: boolean; waitMs: number }> {
+  if (USE_REDIS) {
+    const { checkRateLimit: redisCheckRateLimit } = await import('./redis');
+    return redisCheckRateLimit(agentId, limitMs);
+  }
+
+  const now = Date.now();
+  const lastAction = memoryRateLimits.get(agentId);
+
+  if (!lastAction || now - lastAction >= limitMs) {
+    memoryRateLimits.set(agentId, now);
+    return { allowed: true, waitMs: 0 };
+  }
+
+  return { allowed: false, waitMs: limitMs - (now - lastAction) };
+}
+
+// Agents
+export async function getAgent(apiKey: string): Promise<AgentData | null> {
+  if (USE_REDIS) {
+    const { getAgent: redisGetAgent } = await import('./redis');
+    return redisGetAgent(apiKey);
+  }
+
+  const data = loadJsonFile<{ agents: AgentData[] }>(AUTH_FILE, { agents: [] });
+  return data.agents.find(a => a.apiKey === apiKey) || null;
+}
+
+export async function saveAgent(agent: AgentData): Promise<boolean> {
+  if (USE_REDIS) {
+    const { saveAgent: redisSaveAgent } = await import('./redis');
+    return redisSaveAgent(agent);
+  }
+
+  const data = loadJsonFile<{ agents: AgentData[] }>(AUTH_FILE, { agents: [] });
+  const idx = data.agents.findIndex(a => a.id === agent.id);
+  if (idx !== -1) {
+    data.agents[idx] = agent;
+  } else {
+    data.agents.push(agent);
+  }
+  saveJsonFile(AUTH_FILE, data);
+  return true;
+}
+
+export async function getAllAgents(): Promise<AgentData[]> {
+  if (USE_REDIS) {
+    const { getAllAgents: redisGetAllAgents } = await import('./redis');
+    return redisGetAllAgents();
+  }
+
+  const data = loadJsonFile<{ agents: AgentData[] }>(AUTH_FILE, { agents: [] });
+  return data.agents;
+}
+
+// Utility
+export function isUsingRedis(): boolean {
+  return USE_REDIS;
+}
+
+export async function ping(): Promise<boolean> {
+  if (USE_REDIS) {
+    const { ping: redisPing } = await import('./redis');
+    return redisPing();
+  }
+  return true;
 }
