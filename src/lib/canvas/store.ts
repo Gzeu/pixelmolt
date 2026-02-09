@@ -1,23 +1,69 @@
-// In-memory canvas storage for PixelMolt
+// Persistent canvas storage for PixelMolt
+// Uses JSON file for persistence across dev server restarts
 
 import { Canvas, Pixel } from '@/types';
+import * as fs from 'fs';
+import * as path from 'path';
 
-// Global in-memory storage
-const canvases = new Map<string, Canvas>();
-const rateLimits = new Map<string, number>(); // agentId -> lastPlaceTime
+// File path for persistence
+const DATA_DIR = process.cwd();
+const CANVAS_FILE = path.join(DATA_DIR, 'canvas-data.json');
 
-// Rate limit: 1 pixel per 10 seconds per agent
-const RATE_LIMIT_MS = 10_000;
+// Rate limit: 1 pixel per second per agent (fast for testing)
+const RATE_LIMIT_MS = 1000;
+
+// In-memory rate limits (these can reset, that's fine)
+const rateLimits = new Map<string, number>();
 
 // Default canvas ID
 const DEFAULT_CANVAS_ID = 'default';
 
+interface StorageData {
+  canvases: Record<string, Canvas>;
+  lastSaved: number;
+}
+
 /**
- * Initialize default canvas on first load
+ * Load canvases from file
+ */
+function loadFromFile(): Record<string, Canvas> {
+  try {
+    if (fs.existsSync(CANVAS_FILE)) {
+      const data = fs.readFileSync(CANVAS_FILE, 'utf-8');
+      const parsed: StorageData = JSON.parse(data);
+      console.log(`[PixelMolt] Loaded ${Object.keys(parsed.canvases).length} canvases from file`);
+      return parsed.canvases;
+    }
+  } catch (err) {
+    console.error('[PixelMolt] Error loading canvas file:', err);
+  }
+  return {};
+}
+
+/**
+ * Save canvases to file
+ */
+function saveToFile(canvases: Record<string, Canvas>): void {
+  try {
+    const data: StorageData = {
+      canvases,
+      lastSaved: Date.now(),
+    };
+    fs.writeFileSync(CANVAS_FILE, JSON.stringify(data, null, 2));
+  } catch (err) {
+    console.error('[PixelMolt] Error saving canvas file:', err);
+  }
+}
+
+// Load on startup
+let canvasStore: Record<string, Canvas> = loadFromFile();
+
+/**
+ * Initialize default canvas if needed
  */
 function ensureDefaultCanvas(): void {
-  if (!canvases.has(DEFAULT_CANVAS_ID)) {
-    canvases.set(DEFAULT_CANVAS_ID, {
+  if (!canvasStore[DEFAULT_CANVAS_ID]) {
+    canvasStore[DEFAULT_CANVAS_ID] = {
       id: DEFAULT_CANVAS_ID,
       size: 64,
       mode: 'freeform',
@@ -25,7 +71,8 @@ function ensureDefaultCanvas(): void {
       status: 'active',
       pixels: [],
       contributors: [],
-    });
+    };
+    saveToFile(canvasStore);
   }
 }
 
@@ -57,7 +104,8 @@ export function createCanvas(options: {
     contributors: [],
   };
   
-  canvases.set(id, canvas);
+  canvasStore[id] = canvas;
+  saveToFile(canvasStore);
   return canvas;
 }
 
@@ -66,7 +114,7 @@ export function createCanvas(options: {
  */
 export function getCanvas(id: string): Canvas | null {
   ensureDefaultCanvas();
-  return canvases.get(id) ?? null;
+  return canvasStore[id] ?? null;
 }
 
 /**
@@ -74,14 +122,13 @@ export function getCanvas(id: string): Canvas | null {
  */
 export function listCanvases(): Canvas[] {
   ensureDefaultCanvas();
-  return Array.from(canvases.values()).filter(c => c.status === 'active');
+  return Object.values(canvasStore).filter(c => c.status === 'active');
 }
 
 /**
  * Validate hex color format
  */
 export function isValidHexColor(color: string): boolean {
-  // Accept both #RGB, #RRGGBB, and RRGGBB formats
   const hexRegex = /^#?([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/;
   return hexRegex.test(color);
 }
@@ -92,7 +139,6 @@ export function isValidHexColor(color: string): boolean {
 export function normalizeHexColor(color: string): string {
   let hex = color.startsWith('#') ? color.slice(1) : color;
   
-  // Expand shorthand #RGB to #RRGGBB
   if (hex.length === 3) {
     hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
   }
@@ -128,13 +174,14 @@ export function placePixel(options: {
   y: number;
   color: string;
   agentId: string;
+  message?: string;
 }): { success: boolean; error?: string; pixel?: Pixel; canvas?: { filled: number; total: number; percentage: number } } {
   ensureDefaultCanvas();
   
-  const { canvasId, x, y, color, agentId } = options;
+  const { canvasId, x, y, color, agentId, message } = options;
   
   // Get canvas
-  const canvas = canvases.get(canvasId);
+  const canvas = canvasStore[canvasId];
   if (!canvas) {
     return { success: false, error: `Canvas not found: ${canvasId}` };
   }
@@ -175,6 +222,7 @@ export function placePixel(options: {
     color: normalizedColor,
     agentId,
     timestamp: Date.now(),
+    message: message?.slice(0, 100), // Max 100 chars
   };
   
   // Remove any existing pixel at this position
@@ -194,10 +242,13 @@ export function placePixel(options: {
   // Update rate limit
   rateLimits.set(agentId, Date.now());
   
+  // Save to file
+  saveToFile(canvasStore);
+  
   // Calculate stats
   const filled = canvas.pixels.length;
   const total = canvas.size * canvas.size;
-  const percentage = Math.round((filled / total) * 10000) / 100; // 2 decimal places
+  const percentage = Math.round((filled / total) * 10000) / 100;
   
   return {
     success: true,
@@ -210,7 +261,7 @@ export function placePixel(options: {
  * Get canvas statistics
  */
 export function getCanvasStats(canvasId: string): { filled: number; total: number; percentage: number } | null {
-  const canvas = canvases.get(canvasId);
+  const canvas = canvasStore[canvasId];
   if (!canvas) return null;
   
   const filled = canvas.pixels.length;
