@@ -91,21 +91,44 @@ async function saveCanvasToStorage(canvas: Canvas): Promise<boolean> {
  * Initialize default canvas if needed
  */
 async function ensureDefaultCanvas(): Promise<Canvas> {
-  let canvas = await getCanvasFromStorage();
+  // First check Redis directly (bypass cache)
+  const existingData = await storage.getCanvas();
   
-  if (!canvas) {
-    canvas = {
-      id: DEFAULT_CANVAS_ID,
-      size: DEFAULT_CANVAS_SIZE,
+  if (existingData && existingData.pixels) {
+    // Canvas exists in Redis - use it
+    const canvas: Canvas = {
+      id: existingData.id,
+      size: existingData.size,
       mode: 'freeform',
       theme: 'pixelwar',
       status: 'active',
-      pixels: [],
-      contributors: [],
+      pixels: existingData.pixels.map(p => ({
+        x: p.x,
+        y: p.y,
+        color: p.color,
+        agentId: p.agentId,
+        timestamp: p.timestamp,
+      })),
+      contributors: existingData.contributors,
     };
-    await saveCanvasToStorage(canvas);
-    console.log(`[PixelMolt] Created default canvas ${DEFAULT_CANVAS_SIZE}x${DEFAULT_CANVAS_SIZE}`);
+    canvasCache = canvas;
+    cacheTime = Date.now();
+    console.log(`[PixelMolt] Loaded existing canvas with ${canvas.pixels.length} pixels`);
+    return canvas;
   }
+  
+  // No canvas exists - create new one
+  console.log(`[PixelMolt] Creating new default canvas ${DEFAULT_CANVAS_SIZE}x${DEFAULT_CANVAS_SIZE}`);
+  const canvas: Canvas = {
+    id: DEFAULT_CANVAS_ID,
+    size: DEFAULT_CANVAS_SIZE,
+    mode: 'freeform',
+    theme: 'pixelwar',
+    status: 'active',
+    pixels: [],
+    contributors: [],
+  };
+  await saveCanvasToStorage(canvas);
   
   return canvas;
 }
@@ -377,7 +400,19 @@ export async function healthCheck(): Promise<{ ok: boolean; storage: string }> {
   };
 }
 
-// Initialize on module load
-ensureDefaultCanvas().catch(err => {
-  console.error('[PixelMolt] Failed to initialize canvas:', err);
-});
+// Initialize on module load - but DON'T overwrite existing canvas!
+// Just warm the cache if Redis has data
+(async () => {
+  try {
+    const existing = await storage.getCanvas();
+    if (existing) {
+      console.log(`[PixelMolt] Found existing canvas with ${existing.pixels.length} pixels`);
+    } else {
+      // Only create if truly empty
+      console.log(`[PixelMolt] No canvas found, creating default ${DEFAULT_CANVAS_SIZE}x${DEFAULT_CANVAS_SIZE}`);
+      await ensureDefaultCanvas();
+    }
+  } catch (err) {
+    console.error('[PixelMolt] Init error (will retry on first request):', err);
+  }
+})();
