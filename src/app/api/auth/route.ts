@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const result = registerAgent(name);
+    const result = await registerAgent(name);
     
     if (!result.success) {
       return NextResponse.json(
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
   
   if (!apiKey) {
     // Return public stats
-    const agents = listAgents();
+    const agents = await listAgents();
     return NextResponse.json({
       success: true,
       stats: {
@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
     });
   }
   
-  const agent = getAgentByApiKey(apiKey);
+  const agent = await getAgentByApiKey(apiKey);
   
   if (!agent) {
     return NextResponse.json(

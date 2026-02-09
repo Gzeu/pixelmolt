@@ -40,6 +40,7 @@ interface AgentData {
   pixelsPlaced: number;
   karma: number;
   createdAt: number;
+  lastActive: number;
   moltbookUsername?: string;
 }
 

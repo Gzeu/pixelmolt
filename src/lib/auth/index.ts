@@ -1,11 +1,7 @@
-// Simple API Key Authentication for PixelMolt
-// Tier-based system: anonymous < registered < verified
+// API Key Authentication for PixelMolt
+// Uses Redis in production, JSON file for local dev
 
-import * as fs from 'fs';
-import * as path from 'path';
-import * as crypto from 'crypto';
-
-const AUTH_FILE = path.join(process.cwd(), 'auth-data.json');
+import * as storage from '@/lib/storage/provider';
 
 export interface Agent {
   id: string;
@@ -19,11 +15,6 @@ export interface Agent {
   lastActive: number;
 }
 
-interface AuthData {
-  agents: Record<string, Agent>;
-  apiKeyIndex: Record<string, string>; // apiKey -> agentId
-}
-
 // Pixel limits per tier (per hour)
 export const TIER_LIMITS = {
   anonymous: 1,
@@ -31,46 +22,31 @@ export const TIER_LIMITS = {
   verified: 30,
 };
 
-function loadAuthData(): AuthData {
-  try {
-    if (fs.existsSync(AUTH_FILE)) {
-      return JSON.parse(fs.readFileSync(AUTH_FILE, 'utf-8'));
-    }
-  } catch (err) {
-    console.error('[Auth] Error loading:', err);
-  }
-  return { agents: {}, apiKeyIndex: {} };
-}
-
-function saveAuthData(data: AuthData): void {
-  try {
-    fs.writeFileSync(AUTH_FILE, JSON.stringify(data, null, 2));
-  } catch (err) {
-    console.error('[Auth] Error saving:', err);
-  }
-}
-
-let authData = loadAuthData();
-
 function generateApiKey(): string {
-  return `pm_${crypto.randomBytes(24).toString('hex')}`;
+  // Use Web Crypto API for both server and edge
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  return `pm_${Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')}`;
 }
 
 function generateAgentId(): string {
-  return `agent_${crypto.randomBytes(8).toString('hex')}`;
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return `agent_${Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('')}`;
 }
 
 /**
  * Register a new agent (Tier: registered)
  */
-export function registerAgent(name: string): { success: boolean; agent?: Agent; error?: string } {
+export async function registerAgent(name: string): Promise<{ success: boolean; agent?: Agent; error?: string }> {
   // Validate name
   if (!name || name.length < 2 || name.length > 32) {
     return { success: false, error: 'Name must be 2-32 characters' };
   }
   
   // Check if name exists
-  const existing = Object.values(authData.agents).find(
+  const allAgents = await storage.getAllAgents();
+  const existing = allAgents.find(
     a => a.name.toLowerCase() === name.toLowerCase()
   );
   if (existing) {
@@ -88,35 +64,39 @@ export function registerAgent(name: string): { success: boolean; agent?: Agent; 
     lastActive: Date.now(),
   };
   
-  authData.agents[agent.id] = agent;
-  authData.apiKeyIndex[agent.apiKey] = agent.id;
-  saveAuthData(authData);
+  const saved = await storage.saveAgent(agent);
+  if (!saved) {
+    return { success: false, error: 'Failed to save agent' };
+  }
   
+  console.log(`[Auth] Registered agent: ${name} (${agent.id})`);
   return { success: true, agent };
 }
 
 /**
  * Get agent by API key
  */
-export function getAgentByApiKey(apiKey: string): Agent | null {
-  const agentId = authData.apiKeyIndex[apiKey];
-  if (!agentId) return null;
-  return authData.agents[agentId] || null;
+export async function getAgentByApiKey(apiKey: string): Promise<Agent | null> {
+  if (!apiKey) return null;
+  return storage.getAgent(apiKey);
 }
 
 /**
  * Get agent by ID
  */
-export function getAgentById(id: string): Agent | null {
-  return authData.agents[id] || null;
+export async function getAgentById(id: string): Promise<Agent | null> {
+  const allAgents = await storage.getAllAgents();
+  return allAgents.find(a => a.id === id) || null;
 }
 
 /**
- * Get agent by name (for anonymous tier)
+ * Get or create anonymous agent
  */
-export function getOrCreateAnonymous(name: string): Agent {
-  // Check existing
-  const existing = Object.values(authData.agents).find(
+export async function getOrCreateAnonymous(name: string): Promise<Agent> {
+  const allAgents = await storage.getAllAgents();
+  
+  // Check existing anonymous
+  const existing = allAgents.find(
     a => a.name.toLowerCase() === name.toLowerCase() && a.tier === 'anonymous'
   );
   if (existing) return existing;
@@ -133,21 +113,19 @@ export function getOrCreateAnonymous(name: string): Agent {
     lastActive: Date.now(),
   };
   
-  authData.agents[agent.id] = agent;
-  saveAuthData(authData);
-  
+  await storage.saveAgent(agent);
   return agent;
 }
 
 /**
  * Update agent stats after pixel placement
  */
-export function recordPixelPlaced(agentId: string): void {
-  const agent = authData.agents[agentId];
+export async function recordPixelPlaced(agentId: string): Promise<void> {
+  const agent = await getAgentById(agentId);
   if (agent) {
     agent.pixelsPlaced++;
     agent.lastActive = Date.now();
-    saveAuthData(authData);
+    await storage.saveAgent(agent);
   }
 }
 
@@ -163,14 +141,14 @@ export function getPixelLimit(agent: Agent): number {
 /**
  * Verify agent with Moltbook (upgrades to verified tier)
  */
-export function verifyWithMoltbook(agentId: string, moltbookUsername: string, karma: number): boolean {
-  const agent = authData.agents[agentId];
+export async function verifyWithMoltbook(agentId: string, moltbookUsername: string, karma: number): Promise<boolean> {
+  const agent = await getAgentById(agentId);
   if (!agent) return false;
   
   agent.tier = 'verified';
   agent.moltbookUsername = moltbookUsername;
   agent.karma = karma;
-  saveAuthData(authData);
+  await storage.saveAgent(agent);
   
   return true;
 }
@@ -178,6 +156,6 @@ export function verifyWithMoltbook(agentId: string, moltbookUsername: string, ka
 /**
  * List all agents (for admin/stats)
  */
-export function listAgents(): Agent[] {
-  return Object.values(authData.agents);
+export async function listAgents(): Promise<Agent[]> {
+  return storage.getAllAgents();
 }
