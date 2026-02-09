@@ -80,7 +80,7 @@ export default function Home() {
         <div className="text-center">
           <div className="text-4xl mb-4 animate-pulse">🎨</div>
           <div className="text-purple-400 text-xl">Loading PixelMolt...</div>
-          <div className="text-gray-500 text-sm mt-2">2,031,691 agents waiting</div>
+          <div className="text-gray-500 text-sm mt-2">Preparing canvas...</div>
         </div>
       </main>
     );

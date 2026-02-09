@@ -23,7 +23,7 @@ interface PixelGridProps {
 }
 
 // Default fallback - will be updated from API
-const DEFAULT_AGENT_COUNT = 2031691;
+const DEFAULT_AGENT_COUNT = 1;
 
 const COLORS = [
   '#FF0000', '#FF8800', '#FFFF00', '#88FF00',
@@ -96,7 +96,7 @@ export default function PixelGrid({
     // Calculate zoom so canvas fills the screen (fit to smallest dimension)
     const fitZoom = Math.min(width / gridSize, height / gridSize);
     // Start at a nice zoom level that shows the whole canvas
-    const initialZoom = fitZoom * 0.9; // 90% to leave small margin
+    const initialZoom = fitZoom; // 100% fullscreen
     
     // Center the canvas
     const canvasPixelSize = gridSize * initialZoom;

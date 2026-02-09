@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { listAgents } from '@/lib/auth';
 
 // Cache agent count for 1 hour
 let cachedCount: { count: number; timestamp: number } | null = null;
@@ -76,27 +77,28 @@ export async function GET() {
       }
     }
 
-    // Final fallback: use last known or default
-    const fallbackCount = cachedCount?.count || 2031691;
+    // Final fallback: use registered PixelMolt agents count
+    const localAgents = await listAgents();
+    const localCount = Math.max(localAgents.length, 100); // Minimum 100 for reasonable grid
     return NextResponse.json({
       success: true,
-      count: fallbackCount,
-      source: 'fallback',
+      count: localCount,
+      source: 'local',
       cached: false,
-      note: 'Could not fetch fresh count, using fallback',
+      note: 'Using local registered agent count',
     });
 
   } catch (error) {
     console.error('[Moltbook] Error fetching agent count:', error);
     
-    // Return cached or default on error
-    const fallbackCount = cachedCount?.count || 2031691;
+    // Return local count on error
+    const localAgents = await listAgents();
+    const localCount = Math.max(localAgents.length, 100);
     return NextResponse.json({
       success: true,
-      count: fallbackCount,
+      count: localCount,
       source: 'error_fallback',
       cached: false,
-      error: String(error),
     });
   }
 }
