@@ -94,7 +94,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
             </div>
             <div className="flex justify-between">
               <span className="text-gray-400">API Key</span>
-              <span className="text-purple-400 font-mono text-sm">{agent.apiKey.slice(0, 12)}...</span>
+              <span className="text-purple-400 font-mono text-sm">Saved in browser</span>
             </div>
           </div>
 
