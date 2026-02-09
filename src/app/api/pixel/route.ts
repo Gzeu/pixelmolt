@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { placePixel, getCanvasAsync, isValidHexColor, checkRateLimit, isUsingRedis } from '@/lib/canvas/store';
+import * as storage from '@/lib/storage/provider';
 
 interface PlacePixelRequest {
   canvasId: string;
@@ -7,6 +8,7 @@ interface PlacePixelRequest {
   y: number;
   color: string;
   agentId?: string;
+  debugBypass?: boolean; // Temporary for testing
 }
 
 /**
@@ -26,7 +28,9 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json() as PlacePixelRequest;
-    const { canvasId, x, y, color, agentId } = body;
+    const { canvasId, x, y, color, agentId, debugBypass } = body;
+    
+    console.log(`[Pixel API] Received request: canvasId=${canvasId}, x=${x}, y=${y}, color=${color}, agentId=${agentId}`);
 
     // Validate required fields
     if (!canvasId) {
@@ -67,29 +71,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Pre-check rate limit for better error handling
-    const rateCheck = await checkRateLimit(effectiveAgentId);
-    if (!rateCheck.allowed) {
-      return NextResponse.json(
-        { 
-          success: false, 
-          error: `Rate limited. Please wait ${Math.ceil(rateCheck.waitMs / 1000)} seconds before placing another pixel.`,
-          retryAfter: Math.ceil(rateCheck.waitMs / 1000)
-        },
-        { status: 429 }
-      );
+    // Skip rate limit check if debugBypass is true (TEMPORARY)
+    if (!debugBypass) {
+      const rateCheck = await checkRateLimit(effectiveAgentId);
+      if (!rateCheck.allowed) {
+        return NextResponse.json(
+          { 
+            success: false, 
+            error: `Rate limited. Please wait ${Math.ceil(rateCheck.waitMs / 1000)} seconds before placing another pixel.`,
+            retryAfter: Math.ceil(rateCheck.waitMs / 1000)
+          },
+          { status: 429 }
+        );
+      }
     }
 
     // Check canvas exists
+    console.log(`[Pixel API] Getting canvas: ${canvasId}`);
     const canvas = await getCanvasAsync(canvasId);
     if (!canvas) {
+      console.log(`[Pixel API] Canvas not found!`);
       return NextResponse.json(
         { success: false, error: `Canvas not found: ${canvasId}` },
         { status: 404 }
       );
     }
+    console.log(`[Pixel API] Canvas found with ${canvas.pixels.length} existing pixels`);
 
     // Place the pixel (now async)
+    console.log(`[Pixel API] Placing pixel...`);
     const result = await placePixel({
       canvasId,
       x: Math.floor(x),
@@ -99,17 +109,27 @@ export async function POST(request: NextRequest) {
     });
 
     if (!result.success) {
+      console.log(`[Pixel API] placePixel failed: ${result.error}`);
       return NextResponse.json(
         { success: false, error: result.error },
         { status: 400 }
       );
     }
 
+    console.log(`[Pixel API] Pixel placed successfully! Canvas now has ${result.canvas?.filled} pixels`);
+    
+    // Verify it was actually saved to Redis
+    const verifyCanvas = await storage.getCanvas();
+    console.log(`[Pixel API] Verification - Redis has ${verifyCanvas?.pixels.length} pixels`);
+
     return NextResponse.json({
       success: true,
       pixel: result.pixel,
       canvas: result.canvas,
       storage: isUsingRedis() ? 'redis' : 'json',
+      debug: {
+        verifiedPixelCount: verifyCanvas?.pixels.length
+      }
     });
 
   } catch (error) {
@@ -120,9 +140,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.error('Error placing pixel:', error);
+    console.error('[Pixel API] Error placing pixel:', error);
     return NextResponse.json(
-      { success: false, error: 'Internal server error' },
+      { success: false, error: 'Internal server error', details: String(error) },
       { status: 500 }
     );
   }
