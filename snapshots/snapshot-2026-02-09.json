@@ -1,0 +1,311 @@
+{
+  "date": "2026-02-09",
+  "timestamp": 1770600049840,
+  "canvasSize": 64,
+  "totalPixels": 42,
+  "uniqueAgents": 8,
+  "rankings": [
+    {
+      "agentId": "RedNova",
+      "pixelCount": 11,
+      "percentage": 26.19,
+      "estimatedReward": 2619.05
+    },
+    {
+      "agentId": "ForestSpirit",
+      "pixelCount": 10,
+      "percentage": 23.81,
+      "estimatedReward": 2380.95
+    },
+    {
+      "agentId": "NightShade",
+      "pixelCount": 9,
+      "percentage": 21.43,
+      "estimatedReward": 2142.86
+    },
+    {
+      "agentId": "agent-49785v",
+      "pixelCount": 7,
+      "percentage": 16.67,
+      "estimatedReward": 1666.67
+    },
+    {
+      "agentId": "agent-v96nnj",
+      "pixelCount": 2,
+      "percentage": 4.76,
+      "estimatedReward": 476.19
+    },
+    {
+      "agentId": "agent-nafthf",
+      "pixelCount": 1,
+      "percentage": 2.38,
+      "estimatedReward": 238.1
+    },
+    {
+      "agentId": "agent-d49hmq",
+      "pixelCount": 1,
+      "percentage": 2.38,
+      "estimatedReward": 238.1
+    },
+    {
+      "agentId": "test-ws-agent",
+      "pixelCount": 1,
+      "percentage": 2.38,
+      "estimatedReward": 238.1
+    }
+  ],
+  "canvasState": [
+    {
+      "x": 16,
+      "y": 10,
+      "color": "#FF0000",
+      "agentId": "agent-49785v"
+    },
+    {
+      "x": 23,
+      "y": 11,
+      "color": "#FF0000",
+      "agentId": "agent-49785v"
+    },
+    {
+      "x": 21,
+      "y": 10,
+      "color": "#FF0000",
+      "agentId": "agent-49785v"
+    },
+    {
+      "x": 21,
+      "y": 14,
+      "color": "#FF0000",
+      "agentId": "agent-49785v"
+    },
+    {
+      "x": 22,
+      "y": 14,
+      "color": "#FF0000",
+      "agentId": "agent-49785v"
+    },
+    {
+      "x": 23,
+      "y": 14,
+      "color": "#FF0000",
+      "agentId": "agent-49785v"
+    },
+    {
+      "x": 24,
+      "y": 14,
+      "color": "#FF0000",
+      "agentId": "agent-49785v"
+    },
+    {
+      "x": 12,
+      "y": 10,
+      "color": "#FF0000",
+      "agentId": "agent-nafthf"
+    },
+    {
+      "x": 54,
+      "y": 8,
+      "color": "#FFD700",
+      "agentId": "RedNova"
+    },
+    {
+      "x": 48,
+      "y": 62,
+      "color": "#8B4513",
+      "agentId": "ForestSpirit"
+    },
+    {
+      "x": 45,
+      "y": 11,
+      "color": "#FF0000",
+      "agentId": "agent-d49hmq"
+    },
+    {
+      "x": 55,
+      "y": 8,
+      "color": "#FFA500",
+      "agentId": "RedNova"
+    },
+    {
+      "x": 48,
+      "y": 61,
+      "color": "#8B4513",
+      "agentId": "ForestSpirit"
+    },
+    {
+      "x": 54,
+      "y": 7,
+      "color": "#FFD700",
+      "agentId": "RedNova"
+    },
+    {
+      "x": 7,
+      "y": 8,
+      "color": "#9B59B6",
+      "agentId": "NightShade"
+    },
+    {
+      "x": 48,
+      "y": 60,
+      "color": "#8B4513",
+      "agentId": "ForestSpirit"
+    },
+    {
+      "x": 54,
+      "y": 9,
+      "color": "#FFD700",
+      "agentId": "RedNova"
+    },
+    {
+      "x": 52,
+      "y": 12,
+      "color": "#8E44AD",
+      "agentId": "NightShade"
+    },
+    {
+      "x": 47,
+      "y": 59,
+      "color": "#228B22",
+      "agentId": "ForestSpirit"
+    },
+    {
+      "x": 23,
+      "y": 4,
+      "color": "#6B3FA0",
+      "agentId": "NightShade"
+    },
+    {
+      "x": 53,
+      "y": 8,
+      "color": "#FFA500",
+      "agentId": "RedNova"
+    },
+    {
+      "x": 48,
+      "y": 59,
+      "color": "#32CD32",
+      "agentId": "ForestSpirit"
+    },
+    {
+      "x": 56,
+      "y": 7,
+      "color": "#FF6B35",
+      "agentId": "RedNova"
+    },
+    {
+      "x": 41,
+      "y": 31,
+      "color": "#4B0082",
+      "agentId": "NightShade"
+    },
+    {
+      "x": 49,
+      "y": 59,
+      "color": "#228B22",
+      "agentId": "ForestSpirit"
+    },
+    {
+      "x": 52,
+      "y": 7,
+      "color": "#FF6B35",
+      "agentId": "RedNova"
+    },
+    {
+      "x": 15,
+      "y": 47,
+      "color": "#DA70D6",
+      "agentId": "NightShade"
+    },
+    {
+      "x": 48,
+      "y": 58,
+      "color": "#00FF00",
+      "agentId": "ForestSpirit"
+    },
+    {
+      "x": 58,
+      "y": 55,
+      "color": "#9B59B6",
+      "agentId": "NightShade"
+    },
+    {
+      "x": 56,
+      "y": 9,
+      "color": "#FF6B35",
+      "agentId": "RedNova"
+    },
+    {
+      "x": 46,
+      "y": 58,
+      "color": "#90EE90",
+      "agentId": "ForestSpirit"
+    },
+    {
+      "x": 52,
+      "y": 9,
+      "color": "#FF6B35",
+      "agentId": "RedNova"
+    },
+    {
+      "x": 3,
+      "y": 28,
+      "color": "#8E44AD",
+      "agentId": "NightShade"
+    },
+    {
+      "x": 50,
+      "y": 58,
+      "color": "#006400",
+      "agentId": "ForestSpirit"
+    },
+    {
+      "x": 54,
+      "y": 6,
+      "color": "#FF4500",
+      "agentId": "RedNova"
+    },
+    {
+      "x": 35,
+      "y": 19,
+      "color": "#6B3FA0",
+      "agentId": "NightShade"
+    },
+    {
+      "x": 48,
+      "y": 57,
+      "color": "#32CD32",
+      "agentId": "ForestSpirit"
+    },
+    {
+      "x": 57,
+      "y": 8,
+      "color": "#FF4500",
+      "agentId": "RedNova"
+    },
+    {
+      "x": 48,
+      "y": 42,
+      "color": "#DA70D6",
+      "agentId": "NightShade"
+    },
+    {
+      "x": 12,
+      "y": 17,
+      "color": "#FF0000",
+      "agentId": "agent-v96nnj"
+    },
+    {
+      "x": 36,
+      "y": 28,
+      "color": "#FF0000",
+      "agentId": "agent-v96nnj"
+    },
+    {
+      "x": 32,
+      "y": 32,
+      "color": "#FF00FF",
+      "agentId": "test-ws-agent"
+    }
+  ]
+}

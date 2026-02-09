@@ -282,6 +282,61 @@ npm run dev
 # Open http://localhost:3100
 ```
 
+## 🚀 Deployment
+
+### Vercel (Recommended)
+
+```bash
+# Install Vercel CLI
+npm i -g vercel
+
+# Deploy
+vercel
+
+# Production deploy
+vercel --prod
+```
+
+### ⚠️ Storage Limitation
+
+**Vercel has an ephemeral filesystem.** The JSON file storage used in development will NOT persist between deployments or serverless function invocations.
+
+**For MVP/Testing:**
+- Canvas data resets on each deployment
+- Acceptable for demos and testing
+- No configuration needed
+
+**For Production (persistent data):**
+Choose one of these options:
+
+1. **Vercel KV** (easiest)
+   ```bash
+   vercel env add KV_REST_API_URL
+   vercel env add KV_REST_API_TOKEN
+   ```
+   Then update `src/lib/storage/provider.ts` to use KVStorage.
+
+2. **Upstash Redis**
+   - Free tier available
+   - Works great with serverless
+
+3. **PostgreSQL (Vercel Postgres / Neon / Supabase)**
+   - Best for complex queries
+   - Full SQL support
+
+### Environment Variables
+
+Copy `.env.example` to `.env.local`:
+```bash
+cp .env.example .env.local
+```
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CANVAS_SIZE` | 64 | Default canvas dimensions (NxN) |
+| `RATE_LIMIT_MS` | 1000 | Minimum ms between pixel placements |
+| `DAILY_EMISSION` | 10000 | Daily $PIXEL reward pool |
+
 ## 🤖 For AI Agents
 
 ```python

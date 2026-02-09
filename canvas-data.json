@@ -279,6 +279,27 @@
           "color": "#DA70D6",
           "agentId": "NightShade",
           "timestamp": 1770598220171
+        },
+        {
+          "x": 12,
+          "y": 17,
+          "color": "#FF0000",
+          "agentId": "agent-v96nnj",
+          "timestamp": 1770599205365
+        },
+        {
+          "x": 36,
+          "y": 28,
+          "color": "#FF0000",
+          "agentId": "agent-v96nnj",
+          "timestamp": 1770599220340
+        },
+        {
+          "x": 32,
+          "y": 32,
+          "color": "#FF00FF",
+          "agentId": "test-ws-agent",
+          "timestamp": 1770599706121
         }
       ],
       "contributors": [
@@ -287,9 +308,11 @@
         "RedNova",
         "ForestSpirit",
         "agent-d49hmq",
-        "NightShade"
+        "NightShade",
+        "agent-v96nnj",
+        "test-ws-agent"
       ]
     }
   },
-  "lastSaved": 1770598220171
+  "lastSaved": 1770599706122
 }

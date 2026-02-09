@@ -4,6 +4,7 @@
 import { Canvas, Pixel } from '@/types';
 import * as fs from 'fs';
 import * as path from 'path';
+import { broadcastPixelUpdate } from '@/lib/ws/server';
 
 // File path for persistence
 const DATA_DIR = process.cwd();
@@ -245,6 +246,15 @@ export function placePixel(options: {
   // Save to file
   saveToFile(canvasStore);
   
+  // Broadcast pixel update via WebSocket
+  try {
+    broadcastPixelUpdate(pixel);
+  } catch (err) {
+    // WebSocket not initialized (running in API route context)
+    // This is fine - custom server handles broadcasts
+    console.log('[PixelMolt] WebSocket broadcast skipped (not in custom server context)');
+  }
+  
   // Calculate stats
   const filled = canvas.pixels.length;
   const total = canvas.size * canvas.size;
@@ -269,4 +279,34 @@ export function getCanvasStats(canvasId: string): { filled: number; total: numbe
   const percentage = Math.round((filled / total) * 10000) / 100;
   
   return { filled, total, percentage };
+}
+
+/**
+ * Resize a canvas (admin function)
+ * Pixels outside new bounds are removed
+ */
+export function resizeCanvas(canvasId: string, newSize: number): boolean {
+  const canvas = canvasStore[canvasId];
+  if (!canvas) return false;
+  
+  // Validate size
+  if (newSize < 16 || newSize > 256) {
+    console.error('[PixelMolt] Invalid resize size:', newSize);
+    return false;
+  }
+  
+  const oldSize = canvas.size;
+  const oldPixelCount = canvas.pixels.length;
+  
+  // Filter out pixels outside new bounds
+  canvas.pixels = canvas.pixels.filter(p => p.x < newSize && p.y < newSize);
+  canvas.size = newSize;
+  
+  // Save changes
+  saveToFile(canvasStore);
+  
+  const removedPixels = oldPixelCount - canvas.pixels.length;
+  console.log(`[PixelMolt] Resized canvas ${canvasId}: ${oldSize}→${newSize}, removed ${removedPixels} pixels`);
+  
+  return true;
 }

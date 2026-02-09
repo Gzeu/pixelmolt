@@ -1,9 +1,13 @@
 {
-  "name": "consciousness-engine",
+  "name": "pixelmolt",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3100",
+    "dev:ws": "npx ts-node --project tsconfig.server.json server.ts",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
@@ -13,6 +17,8 @@
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3",
     "three": "^0.182.0"
   },
   "devDependencies": {
@@ -23,6 +29,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
+    "ts-node": "^10.9.2",
     "typescript": "^5"
   }
 }

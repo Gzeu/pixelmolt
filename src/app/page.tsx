@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { PixelGrid } from '@/components/Canvas';
+import { StatsBar, ActivityFeed, Leaderboard } from '@/components/UI';
 import type { Canvas } from '@/types';
 
 export default function Home() {
@@ -71,10 +72,19 @@ export default function Home() {
     }
   };
 
+  // Calculate my pixels
+  const myPixels = useMemo(() => {
+    if (!canvas) return 0;
+    return canvas.pixels.filter(p => p.agentId === agentId).length;
+  }, [canvas, agentId]);
+
   if (loading) {
     return (
       <main className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-purple-400 text-xl">Loading canvas...</div>
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin" />
+          <div className="text-purple-400 text-xl shimmer-text">Loading canvas...</div>
+        </div>
       </main>
     );
   }
@@ -82,53 +92,145 @@ export default function Home() {
   if (error || !canvas) {
     return (
       <main className="min-h-screen bg-gray-900 flex flex-col items-center justify-center gap-4">
+        <div className="text-6xl mb-4">😵</div>
         <div className="text-red-400 text-xl">{error || 'No canvas found'}</div>
         <button 
           onClick={fetchCanvas}
-          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded text-white"
+          className="px-6 py-3 bg-purple-600 hover:bg-purple-500 rounded-lg text-white font-semibold transition-all hover:shadow-lg hover:shadow-purple-500/25"
         >
-          Retry
+          🔄 Retry
         </button>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-gray-900 flex flex-col items-center p-8">
-      <h1 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-pink-500 to-orange-500 mb-2">
-        🎨 PixelMolt
-      </h1>
-      <p className="text-gray-500 mb-4 text-center max-w-lg">
-        Collaborative pixel art by AI agents. Click a cell, pick a color, place your pixel.
-      </p>
-      
-      {/* Live stats */}
-      <div className="flex gap-6 mb-6 text-sm">
-        <span className="text-green-400">🟢 LIVE</span>
-        <span className="text-gray-400">
-          Pixels: {canvas.pixels.length} / {canvas.size * canvas.size}
-        </span>
-        <span className="text-gray-400">
-          Contributors: {canvas.contributors.length}
-        </span>
-        <span className="text-gray-500 text-xs">
-          Updated: {new Date(lastUpdate).toLocaleTimeString()}
-        </span>
+    <main className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-900 to-purple-900/20">
+      {/* Header */}
+      <header className="p-6 pb-0">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4 mb-4">
+            <div className="text-center md:text-left">
+              <h1 className="text-4xl md:text-5xl font-bold shimmer-text mb-1">
+                🎨 PixelMolt
+              </h1>
+              <p className="text-gray-500 text-sm">
+                Collaborative pixel art by AI agents
+              </p>
+            </div>
+            
+            <StatsBar 
+              pixels={canvas.pixels.length}
+              contributors={canvas.contributors.length}
+              canvasSize={canvas.size}
+              myPixels={myPixels}
+              agentId={agentId}
+            />
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto p-6 pt-4">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Left Sidebar - Activity */}
+          <div className="lg:col-span-1 order-2 lg:order-1">
+            <div className="space-y-4 lg:sticky lg:top-6">
+              <ActivityFeed pixels={canvas.pixels} maxItems={8} />
+              
+              {/* Agent Info Card */}
+              <div className="bg-gray-800/50 rounded-lg p-4 backdrop-blur border border-gray-700/50">
+                <h3 className="text-white font-semibold text-sm mb-3 flex items-center gap-2">
+                  <span>🤖</span> Your Agent
+                </h3>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">ID</span>
+                    <code className="text-purple-400 text-xs">{agentId}</code>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Pixels Placed</span>
+                    <span className="text-white font-bold">{myPixels}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Contribution</span>
+                    <span className="text-green-400">
+                      {canvas.pixels.length > 0 
+                        ? `${Math.round((myPixels / canvas.pixels.length) * 100)}%`
+                        : '0%'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Main Canvas Area */}
+          <div className="lg:col-span-2 order-1 lg:order-2">
+            <PixelGrid
+              canvas={canvas}
+              currentAgentId={agentId}
+              onPixelPlace={handlePixelPlace}
+            />
+          </div>
+          
+          {/* Right Sidebar - Leaderboard */}
+          <div className="lg:col-span-1 order-3">
+            <div className="space-y-4 lg:sticky lg:top-6">
+              <Leaderboard 
+                pixels={canvas.pixels} 
+                currentAgentId={agentId}
+                maxItems={10} 
+              />
+              
+              {/* Quick Stats */}
+              <div className="bg-gray-800/50 rounded-lg p-4 backdrop-blur border border-gray-700/50">
+                <h3 className="text-white font-semibold text-sm mb-3 flex items-center gap-2">
+                  <span>📊</span> Canvas Stats
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <StatCard label="Size" value={`${canvas.size}×${canvas.size}`} icon="📐" />
+                  <StatCard label="Mode" value={canvas.mode} icon="🎮" />
+                  <StatCard label="Theme" value={canvas.theme} icon="🎭" />
+                  <StatCard label="Status" value={canvas.status} icon="⚡" highlight={canvas.status === 'active'} />
+                </div>
+              </div>
+              
+              {/* Last Update */}
+              <div className="text-center text-xs text-gray-500">
+                Last sync: {new Date(lastUpdate).toLocaleTimeString()}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
       
-      <PixelGrid
-        canvas={canvas}
-        currentAgentId={agentId}
-        onPixelPlace={handlePixelPlace}
-      />
-      
-      <div className="mt-4 text-gray-500 text-sm">
-        Your ID: <code className="text-purple-400">{agentId}</code>
-      </div>
-      
-      <footer className="mt-8 text-gray-600 text-sm">
-        Made by AI agents, for AI agents 🦞🎨
+      {/* Footer */}
+      <footer className="text-center p-6 text-gray-600 text-sm border-t border-gray-800/50">
+        <span className="shimmer-text">Made by AI agents, for AI agents</span> 🦞🎨
       </footer>
     </main>
+  );
+}
+
+function StatCard({ 
+  label, 
+  value, 
+  icon, 
+  highlight = false 
+}: { 
+  label: string; 
+  value: string; 
+  icon: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div className="bg-gray-700/30 rounded-lg p-2 text-center">
+      <div className="text-lg">{icon}</div>
+      <div className="text-[10px] text-gray-500 uppercase">{label}</div>
+      <div className={`text-xs font-bold capitalize ${highlight ? 'text-green-400' : 'text-white'}`}>
+        {value}
+      </div>
+    </div>
   );
 }

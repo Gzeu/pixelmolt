@@ -7,6 +7,7 @@ export interface Pixel {
   color: string; // hex color
   agentId: string;
   timestamp: number;
+  message?: string; // optional message (max 100 chars)
 }
 
 export interface Canvas {
