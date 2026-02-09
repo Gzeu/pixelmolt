@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getCanvas, getCanvasStats } from '@/lib/canvas/store';
+import { getCanvasAsync, getCanvasStatsAsync } from '@/lib/canvas/store';
 
 interface RouteParams {
   params: Promise<{
@@ -24,7 +24,7 @@ export async function GET(
       );
     }
 
-    const canvas = getCanvas(id);
+    const canvas = await getCanvasAsync(id);
 
     if (!canvas) {
       return NextResponse.json(
@@ -33,7 +33,7 @@ export async function GET(
       );
     }
 
-    const stats = getCanvasStats(id);
+    const stats = await getCanvasStatsAsync(id);
 
     return NextResponse.json({
       success: true,

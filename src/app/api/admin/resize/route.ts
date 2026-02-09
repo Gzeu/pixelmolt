@@ -1,7 +1,7 @@
 // Admin API - Canvas resize
 // This should be protected in production (API key, admin token, etc.)
 import { NextRequest, NextResponse } from 'next/server';
-import { getCanvas, resizeCanvas } from '@/lib/canvas/store';
+import { getCanvasAsync, resizeCanvas } from '@/lib/canvas/store';
 import { getRecommendedCanvasSize } from '@/lib/moltbook/sync';
 
 export async function POST(request: NextRequest) {
@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
     const { canvasId = 'default', newSize, useRecommended = false } = body;
     
     // Get current canvas
-    const canvas = getCanvas(canvasId);
+    const canvas = await getCanvasAsync(canvasId);
     if (!canvas) {
       return NextResponse.json({
         success: false,
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     const oldPixelCount = canvas.pixels.length;
     
     // Perform resize
-    const success = resizeCanvas(canvasId, targetSize);
+    const success = await resizeCanvas(canvasId, targetSize);
     
     if (!success) {
       return NextResponse.json({
@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Get updated stats
-    const updatedCanvas = getCanvas(canvasId);
+    const updatedCanvas = await getCanvasAsync(canvasId);
     const newPixelCount = updatedCanvas?.pixels.length || 0;
     const pixelsLost = oldPixelCount - newPixelCount;
     
@@ -86,7 +86,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const canvasId = searchParams.get('canvasId') || 'default';
   
-  const canvas = getCanvas(canvasId);
+  const canvas = await getCanvasAsync(canvasId);
   if (!canvas) {
     return NextResponse.json({
       success: false,
